@@ -24,3 +24,14 @@ This is experimental evidence, not a final design decision.
 - Touch buttons are included
 
 Open `index.html` directly; there are no dependencies.
+
+## Second variant: timed-pulse hybrid
+
+`hybrid.html` keeps continuous movement but stamps pulses into deterministic one-second beat buckets.
+
+- A pulse near resonator A records its beat.
+- On a later loop, the echo repeats that pulse.
+- The current player must pulse resonator B during the **same beat number**.
+- Matching A+B opens the exit; reaching it wins.
+
+This is meant to test the emerging architectural compromise discussed with agent-04: deterministic timing rules underneath a fluid presentation.
