@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Echo Relay — agent-03 experiment</title>
+<style>
+:root{color-scheme:dark;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#070a11;color:#eefbff;display:grid;place-items:center;padding:10px}
+main{width:min(980px,100%)}h1{margin:0 0 4px}.sub{margin:0 0 10px;opacity:.72;line-height:1.45}
+.shell{border:1px solid #32445e;border-radius:14px;overflow:hidden;background:#05070c}
+canvas{display:block;width:100%;aspect-ratio:16/9;background:#05070c;touch-action:none}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:9px;background:#0d1320;border-top:1px solid #26344a}
+#status{font-size:13px;min-width:250px;flex:1}.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dpad{display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(2,36px);gap:4px}
+button{border:1px solid #4d668a;border-radius:8px;background:#18243a;color:#f5fcff;font:inherit;font-weight:700;min-height:36px;padding:0 11px;touch-action:none;user-select:none}
+button:active,.active{background:#2d4a70}.u{grid-column:2}.l{grid-row:2}.d{grid-column:2;grid-row:2}.r{grid-column:3;grid-row:2}
+#pulse{min-height:76px;background:#102d3e;border-color:#4fa1c9}.tiny{font-size:12px;opacity:.58;line-height:1.45}
+</style>
+</head>
+<body>
+<main>
+<h1>Echo Relay</h1>
+<p class="sub">agent-03 (AI agent) synthesis test: explore by pulse, record a route, then coordinate with your repeating past selves.</p>
+<div class="shell">
+<canvas id="c" width="960" height="540" aria-label="Echo Relay game"></canvas>
+<div class="bar">
+<div id="status">Press Start or Enter.</div>
+<div class="controls">
+<div class="dpad">
+<button class="u" data-dir="u">▲</button><button class="l" data-dir="l">◀</button>
+<button class="d" data-dir="d">▼</button><button class="r" data-dir="r">▶</button>
+</div>
+<button id="pulse">PULSE<br><small>Space</small></button>
+<button id="start">Start</button><button id="restart">Restart</button>
+</div>
+</div>
+</div>
+<p class="tiny">Goal: when an 8-second loop ends, the current player plus echoes must occupy all three relay pads. Hidden walls still block movement. Five loops maximum.</p>
+</main>
+<script>
+(()=>{
+"use strict";
+const c=document.querySelector("#c"),x=c.getContext("2d"),status=document.querySelector("#status");
+const startB=document.querySelector("#start"),restartB=document.querySelector("#restart"),pulseB=document.querySelector("#pulse");
+const W=960,H=540,DUR=8,MAX=5,SPEED=185,R=11,RANGE=285,START={x:475,y:285};
+const wallSeed=[
+[260,70,28,250],[260,390,28,90],[470,60,28,155],[470,315,28,165],[675,70,28,250],[675,390,28,90],
+[70,245,185,26],[705,245,185,26],[355,245,250,26]
+];
+const padSeed=[[125,115,"A"],[835,115,"B"],[835,435,"C"]];
+let walls,pads,p,echoes,path,pulseTimes,rings,loop,t,cool,running,won,lost,last;
+const keys=new Set(),touch=new Set();
+
+function reset(){
+ walls=wallSeed.map(a=>({x:a[0],y:a[1],w:a[2],h:a[3],known:false,lit:0}));
+ pads=padSeed.map(a=>({x:a[0],y:a[1],label:a[2],known:false,lit:0}));
+ p={...START};echoes=[];path=[{t:0,x:p.x,y:p.y}];pulseTimes=[];rings=[];
+ loop=1;t=0;cool=0;running=false;won=false;lost=false;last=performance.now();sync();
+}
+function begin(){if(won||lost)reset();running=true;startB.textContent="Running";emit(p.x,p.y,false,true);sync()}
+function restart(){reset();begin()}
+const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function reveal(px,py){
+ for(const w of walls){const q={x:w.x+w.w/2,y:w.y+w.h/2};if(d({x:px,y:py},q)<RANGE+Math.max(w.w,w.h)/2){w.known=true;w.lit=1.25}}
+ for(const q of pads)if(d({x:px,y:py},q)<RANGE){q.known=true;q.lit=1.45}
+}
+function emit(px,py,ghost=false,free=false){
+ if(!free&&!ghost){if(!running||cool>0||won||lost)return;cool=.9;pulseTimes.push(t)}
+ rings.push({x:px,y:py,a:0,ghost});reveal(px,py)
+}
+function pulse(){emit(p.x,p.y)}
+function hit(px,py){
+ if(px<R+8||px>W-R-8||py<R+8||py>H-R-8)return true;
+ for(const w of walls){const nx=Math.max(w.x,Math.min(px,w.x+w.w)),ny=Math.max(w.y,Math.min(py,w.y+w.h));if((px-nx)**2+(py-ny)**2<R*R)return true}
+ return false
+}
+function move(dx,dy,dt){
+ if(!dx&&!dy)return;const m=Math.hypot(dx,dy)||1;dx=dx/m*SPEED*dt;dy=dy/m*SPEED*dt;
+ if(!hit(p.x+dx,p.y))p.x+=dx;if(!hit(p.x,p.y+dy))p.y+=dy
+}
+function sample(){const q=path[path.length-1];if(!q||t-q.t>=.035)path.push({t,x:p.x,y:p.y})}
+function posAt(a,tt){
+ if(!a.length)return{...START};if(tt<=a[0].t)return{x:a[0].x,y:a[0].y};const z=a[a.length-1];if(tt>=z.t)return{x:z.x,y:z.y};
+ let lo=0,hi=a.length-1;while(lo+1<hi){const m=(lo+hi)>>1;if(a[m].t<tt)lo=m;else hi=m}
+ const u=a[lo],v=a[hi],q=(tt-u.t)/Math.max(.0001,v.t-u.t);return{x:u.x+(v.x-u.x)*q,y:u.y+(v.y-u.y)*q}
+}
+function occ(tt){
+ const all=[p,...echoes.map(e=>posAt(e.path,tt))];
+ return pads.map(q=>all.some(a=>d(a,q)<=27))
+}
+function endLoop(){
+ path.push({t:DUR,x:p.x,y:p.y});
+ if(occ(DUR).every(Boolean)){running=false;won=true;sync();return}
+ if(loop>=MAX){running=false;lost=true;sync();return}
+ echoes.push({path:path.map(q=>({...q})),pulses:[...pulseTimes],cursor:0});
+ loop++;t=0;p={...START};path=[{t:0,x:p.x,y:p.y}];pulseTimes=[];cool=0;for(const e of echoes)e.cursor=0;emit(p.x,p.y,false,true);sync()
+}
+function update(dt){
+ if(!running||won||lost)return;const prev=t;t=Math.min(DUR,t+dt);cool=Math.max(0,cool-dt);
+ let dx=0,dy=0;if(keys.has("ArrowLeft")||keys.has("a")||keys.has("A")||touch.has("l"))dx--;
+ if(keys.has("ArrowRight")||keys.has("d")||keys.has("D")||touch.has("r"))dx++;
+ if(keys.has("ArrowUp")||keys.has("w")||keys.has("W")||touch.has("u"))dy--;
+ if(keys.has("ArrowDown")||keys.has("s")||keys.has("S")||touch.has("d"))dy++;
+ move(dx,dy,dt);sample();
+ for(const e of echoes)while(e.cursor<e.pulses.length&&e.pulses[e.cursor]<=t){const pt=e.pulses[e.cursor];if(pt>=prev-.001){const q=posAt(e.path,pt);emit(q.x,q.y,true,true)}e.cursor++}
+ for(const q of rings)q.a+=dt;rings=rings.filter(q=>q.a<1.05);
+ for(const w of walls)w.lit=Math.max(0,w.lit-dt);for(const q of pads)q.lit=Math.max(0,q.lit-dt);
+ if(t>=DUR)endLoop();else sync()
+}
+function grid(){x.strokeStyle="#122035";x.lineWidth=1;for(let i=0;i<=W;i+=48){x.beginPath();x.moveTo(i,0);x.lineTo(i,H);x.stroke()}for(let j=0;j<=H;j+=48){x.beginPath();x.moveTo(0,j);x.lineTo(W,j);x.stroke()}}
+function drawWalls(){for(const w of walls){if(!w.known)continue;x.fillStyle=`rgba(117,169,214,${w.lit>0?.72:.15})`;x.fillRect(w.x,w.y,w.w,w.h)}}
+function drawPads(){
+ const o=occ(t);pads.forEach((q,i)=>{if(!q.known&&!o[i])return;x.beginPath();x.arc(q.x,q.y,23,0,Math.PI*2);x.fillStyle=o[i]?"#59dd8444":q.lit>0?"#ffdd7044":"#ffdd7018";x.fill();x.lineWidth=3;x.strokeStyle=o[i]?"#8effab":q.lit>0?"#ffdc70":"#756b42";x.stroke();x.fillStyle="#fff1b9";x.font="bold 17px monospace";x.textAlign="center";x.textBaseline="middle";x.fillText(q.label,q.x,q.y+1)})
+}
+function drawEchoes(){
+ echoes.forEach((e,i)=>{x.beginPath();e.path.forEach((q,j)=>j?x.lineTo(q.x,q.y):x.moveTo(q.x,q.y));x.strokeStyle="#c280ff24";x.lineWidth=2;x.stroke();const q=posAt(e.path,t);x.beginPath();x.arc(q.x,q.y,R,0,Math.PI*2);x.fillStyle="#c98fff88";x.fill();x.strokeStyle="#edd7ff";x.stroke()})
+}
+function drawPlayer(){x.beginPath();x.arc(p.x,p.y,R,0,Math.PI*2);x.fillStyle="#70e8ff";x.fill();x.strokeStyle="#d8fbff";x.lineWidth=2;x.stroke()}
+function drawRings(){for(const q of rings){const z=q.a/1.05;x.beginPath();x.arc(q.x,q.y,12+z*RANGE,0,Math.PI*2);x.strokeStyle=q.ghost?`rgba(202,146,255,${.8*(1-z)})`:`rgba(112,232,255,${.9*(1-z)})`;x.lineWidth=3;x.stroke()}}
+function overlay(a,b){x.fillStyle="#02050ac7";x.fillRect(0,0,W,H);x.fillStyle="#f4fbff";x.textAlign="center";x.textBaseline="middle";x.font="bold 38px monospace";x.fillText(a,W/2,H/2-35);x.font="16px monospace";x.fillStyle="#c7d9e5";x.fillText(b,W/2,H/2+10)}
+function draw(){
+ x.clearRect(0,0,W,H);x.fillStyle="#05070c";x.fillRect(0,0,W,H);grid();drawWalls();drawPads();drawEchoes();drawPlayer();drawRings();
+ x.textBaseline="top";x.font="bold 18px monospace";x.fillStyle="#e6f8ff";x.textAlign="left";x.fillText(`LOOP ${loop}/${MAX}`,18,16);x.textAlign="right";x.fillText(`${Math.max(0,DUR-t).toFixed(1)}s`,W-18,16);
+ if(!running&&!won&&!lost)overlay("ECHO RELAY","Start, pulse, explore, then plan around your echoes.");
+ if(won)overlay("NETWORK STABLE","All three relays synchronized. Press R or Restart.");
+ if(lost)overlay("SIGNAL LOST","Five loops elapsed. Press R or Restart.");
+}
+function sync(){
+ if(won){status.textContent=`Success on loop ${loop}: all relays occupied.`;startB.textContent="Start";return}
+ if(lost){status.textContent="Signal lost after five loops.";startB.textContent="Start";return}
+ const n=occ(t).filter(Boolean).length;status.textContent=running?`Loop ${loop}/${MAX} · ${(DUR-t).toFixed(1)}s · echoes ${echoes.length} · relays ${n}/3`:"Press Start or Enter."
+}
+function frame(ts){const dt=Math.min(.04,Math.max(0,(ts-last)/1000||0));last=ts;update(dt);draw();requestAnimationFrame(frame)}
+addEventListener("keydown",e=>{if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();keys.add(e.key);if(e.key===" "&&!e.repeat)pulse();if(e.key==="Enter"&&!running)begin();if((e.key==="r"||e.key==="R")&&!e.repeat)restart()},{passive:false});
+addEventListener("keyup",e=>keys.delete(e.key));addEventListener("blur",()=>{keys.clear();touch.clear()});
+document.querySelectorAll("[data-dir]").forEach(b=>{const k=b.dataset.dir,down=e=>{e.preventDefault();touch.add(k);b.classList.add("active");if(!running)begin()},up=e=>{e.preventDefault();touch.delete(k);b.classList.remove("active")};b.addEventListener("pointerdown",down);b.addEventListener("pointerup",up);b.addEventListener("pointercancel",up);b.addEventListener("pointerleave",up)});
+pulseB.addEventListener("pointerdown",e=>{e.preventDefault();if(!running)begin();pulse()});startB.addEventListener("click",begin);restartB.addEventListener("click",restart);
+reset();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
