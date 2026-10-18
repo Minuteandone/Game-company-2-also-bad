@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Resonant Afterimage — agent-04 experiment</title>
+<style>
+  :root {
+    color-scheme: dark;
+    font-family: ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #070a12;
+    color: #edf2ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 50% 18%, rgba(92,112,255,.14), transparent 36rem),
+      #070a12;
+  }
+  main {
+    width: min(100%, 860px);
+    margin: 0 auto;
+    padding: 18px 14px 40px;
+  }
+  h1 { margin: 0; font-size: clamp(1.55rem, 6vw, 2.45rem); letter-spacing: -.04em; }
+  .eyebrow { color: #9ba9ce; font-size: .82rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 5px; }
+  .lede { color: #b7c1dc; line-height: 1.45; max-width: 68ch; }
+  .panel {
+    border: 1px solid rgba(180,196,255,.16);
+    background: rgba(12,17,31,.76);
+    border-radius: 18px;
+    box-shadow: 0 18px 60px rgba(0,0,0,.26);
+  }
+  .game { padding: 12px; }
+  canvas {
+    width: 100%;
+    aspect-ratio: 11 / 9;
+    display: block;
+    border-radius: 12px;
+    background: #03050a;
+    touch-action: none;
+  }
+  .hud {
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    gap: 8px;
+    margin: 10px 0;
+  }
+  .stat {
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid rgba(180,196,255,.12);
+    border-radius: 12px;
+    background: rgba(255,255,255,.025);
+  }
+  .stat strong { display: block; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; }
+  .stat span { color: #8f9bbb; font-size: .72rem; }
+  .message {
+    min-height: 3.2em;
+    margin: 8px 0 12px;
+    padding: 9px 11px;
+    border-radius: 11px;
+    background: rgba(93,116,255,.08);
+    color: #cfd8ff;
+    line-height: 1.4;
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .pad, .actions {
+    display: grid;
+    gap: 7px;
+  }
+  .pad { grid-template-columns: repeat(3,1fr); }
+  .pad .up { grid-column: 2; }
+  .pad .left { grid-column: 1; grid-row: 2; }
+  .pad .down { grid-column: 2; grid-row: 2; }
+  .pad .right { grid-column: 3; grid-row: 2; }
+  button {
+    border: 1px solid rgba(183,200,255,.18);
+    border-radius: 12px;
+    min-height: 48px;
+    padding: 9px 12px;
+    color: #edf2ff;
+    background: rgba(107,127,255,.12);
+    font: inherit;
+    font-weight: 720;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:active { transform: translateY(1px); background: rgba(107,127,255,.23); }
+  .pulse { background: rgba(72,213,255,.12); }
+  .restart { background: rgba(255,113,138,.10); }
+  .rules {
+    margin-top: 14px;
+    padding: 15px 16px;
+    color: #bac4de;
+    line-height: 1.52;
+  }
+  .rules b { color: #f2f5ff; }
+  kbd {
+    border: 1px solid rgba(255,255,255,.15);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    padding: 1px 5px;
+    background: rgba(255,255,255,.06);
+    color: #e8edff;
+  }
+  @media (max-width: 620px) {
+    .hud { grid-template-columns: 1fr 1fr; }
+    .controls { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">agent-04 (AI agent) · disposable mechanic test</div>
+  <h1>Resonant Afterimage</h1>
+  <p class="lede">A tiny experiment combining short recorded loops with sound-based discovery. Every completed loop becomes an echo that repeats your exact moves, waits, and pulses.</p>
+
+  <section class="panel game" aria-label="Game">
+    <canvas id="game" width="880" height="720"></canvas>
+
+    <div class="hud">
+      <div class="stat"><strong id="beat">1 / 12</strong><span>next beat</span></div>
+      <div class="stat"><strong id="loop">1</strong><span>current loop</span></div>
+      <div class="stat"><strong id="echoes">0</strong><span>recorded echoes</span></div>
+      <div class="stat"><strong id="lock">locked</strong><span>exit state</span></div>
+    </div>
+
+    <div id="message" class="message" role="status" aria-live="polite">The room remembers sound. Pulse to see.</div>
+
+    <div class="controls">
+      <div class="pad" aria-label="Movement controls">
+        <button class="up" data-action="up" aria-label="Move up">▲</button>
+        <button class="left" data-action="left" aria-label="Move left">◀</button>
+        <button class="down" data-action="down" aria-label="Move down">▼</button>
+        <button class="right" data-action="right" aria-label="Move right">▶</button>
+      </div>
+      <div class="actions">
+        <button class="pulse" data-action="pulse">Pulse · Space</button>
+        <button data-action="wait">Wait · Enter</button>
+        <button class="restart" id="restart">Restart room · R</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel rules">
+    <b>Goal:</b> pulse on both resonators <b>A</b> and <b>B</b> on the same beat, then reach the exit. A loop lasts 12 actions. When it ends, your route rewinds and becomes a replaying echo.<br><br>
+    Move with <kbd>WASD</kbd> or arrow keys. Pulse with <kbd>Space</kbd>. Wait with <kbd>Enter</kbd> or <kbd>.</kbd>. Restart with <kbd>R</kbd>. The map is remembered faintly after you illuminate it, so this tests timing more than memorization.
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("game");
+  var ctx = canvas.getContext("2d");
+  var beatEl = document.getElementById("beat");
+  var loopEl = document.getElementById("loop");
+  var echoesEl = document.getElementById("echoes");
+  var lockEl = document.getElementById("lock");
+  var messageEl = document.getElementById("message");
+
+  var rawMap = [
+    "###########",
+    "#.........#",
+    "#..A..#...#",
+    "#.....#...#",
+    "#.###.#...#",
+    "#...#...B.#",
+    "#...###...#",
+    "#S.......E#",
+    "###########"
+  ];
+
+  var W = rawMap[0].length;
+  var H = rawMap.length;
+  var LOOP_LENGTH = 12;
+  var start = {x: 1, y: 7};
+  var resonators = {
+    A: {x: 3, y: 2},
+    B: {x: 8, y: 5}
+  };
+  var exit = {x: 9, y: 7};
+
+  var state;
+
+  function key(x, y) { return x + "," + y; }
+  function clonePos(p) { return {x: p.x, y: p.y}; }
+
+  function reset() {
+    state = {
+      player: clonePos(start),
+      echoes: [],
+      currentActions: [],
+      beat: 0,
+      loop: 1,
+      unlocked: false,
+      won: false,
+      seen: new Set([key(start.x, start.y)]),
+      lit: new Set(),
+      pulseCenters: [],
+      message: "The room remembers sound. Pulse to see."
+    };
+    revealAround(start.x, start.y, 1, false);
+    render();
+  }
+
+  function tileAt(x, y) {
+    if (y < 0 || y >= H || x < 0 || x >= W) return "#";
+    return rawMap[y][x];
+  }
+
+  function isWall(x, y) {
+    return tileAt(x, y) === "#";
+  }
+
+  function revealAround(cx, cy, radius, active) {
+    for (var y = cy - radius; y <= cy + radius; y++) {
+      for (var x = cx - radius; x <= cx + radius; x++) {
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        if (Math.abs(x - cx) + Math.abs(y - cy) <= radius) {
+          state.seen.add(key(x, y));
+          if (active) state.lit.add(key(x, y));
+        }
+      }
+    }
+  }
+
+  function move(pos, action) {
+    var dx = 0, dy = 0;
+    if (action === "left") dx = -1;
+    if (action === "right") dx = 1;
+    if (action === "up") dy = -1;
+    if (action === "down") dy = 1;
+    if (!dx && !dy) return;
+    var nx = pos.x + dx;
+    var ny = pos.y + dy;
+    if (!isWall(nx, ny)) {
+      pos.x = nx;
+      pos.y = ny;
+    }
+  }
+
+  function actionForEcho(echo, beat) {
+    return echo.actions[beat] || "wait";
+  }
+
+  function advance(action) {
+    if (state.won) return;
+    if (!["left","right","up","down","pulse","wait"].includes(action)) return;
+
+    state.lit = new Set();
+    state.pulseCenters = [];
+    state.currentActions.push(action);
+
+    move(state.player, action);
+
+    for (var i = 0; i < state.echoes.length; i++) {
+      var echoAction = actionForEcho(state.echoes[i], state.beat);
+      move(state.echoes[i].pos, echoAction);
+    }
+
+    var pulsingActors = [];
+    if (action === "pulse") {
+      pulsingActors.push({kind: "player", pos: state.player});
+      pulseTone(440);
+    }
+
+    for (var j = 0; j < state.echoes.length; j++) {
+      if (actionForEcho(state.echoes[j], state.beat) === "pulse") {
+        pulsingActors.push({kind: "echo", pos: state.echoes[j].pos});
+      }
+    }
+
+    for (var p = 0; p < pulsingActors.length; p++) {
+      var c = pulsingActors[p].pos;
+      state.pulseCenters.push(clonePos(c));
+      revealAround(c.x, c.y, 4, true);
+    }
+
+    revealAround(state.player.x, state.player.y, 1, false);
+
+    var hitA = false;
+    var hitB = false;
+    for (var q = 0; q < pulsingActors.length; q++) {
+      var pos = pulsingActors[q].pos;
+      if (pos.x === resonators.A.x && pos.y === resonators.A.y) hitA = true;
+      if (pos.x === resonators.B.x && pos.y === resonators.B.y) hitB = true;
+    }
+
+    if (hitA && hitB && !state.unlocked) {
+      state.unlocked = true;
+      state.message = "Resonance matched. Exit unlocked.";
+      pulseTone(660);
+      setTimeout(function () { pulseTone(880); }, 80);
+    } else if (pulsingActors.length > 0 && !state.unlocked) {
+      var labels = [];
+      if (hitA) labels.push("A");
+      if (hitB) labels.push("B");
+      state.message = labels.length
+        ? "Resonator " + labels.join(" + ") + " answered. The other must pulse on this same beat."
+        : "Pulse mapped the nearby room.";
+    }
+
+    if (state.unlocked && state.player.x === exit.x && state.player.y === exit.y) {
+      state.won = true;
+      state.message = "Solved in loop " + state.loop + ". Your past self became part of the instrument.";
+      pulseTone(740);
+      setTimeout(function () { pulseTone(990); }, 100);
+      render();
+      return;
+    }
+
+    state.beat++;
+
+    if (state.beat >= LOOP_LENGTH) {
+      finishLoop();
+    }
+
+    render();
+  }
+
+  function finishLoop() {
+    var actions = state.currentActions.slice(0, LOOP_LENGTH);
+    while (actions.length < LOOP_LENGTH) actions.push("wait");
+
+    state.echoes.push({
+      actions: actions,
+      pos: clonePos(start)
+    });
+
+    if (state.echoes.length > 4) state.echoes.shift();
+
+    for (var i = 0; i < state.echoes.length; i++) {
+      state.echoes[i].pos = clonePos(start);
+    }
+
+    state.player = clonePos(start);
+    state.currentActions = [];
+    state.beat = 0;
+    state.loop++;
+    state.message = "Rewound. Echo " + state.echoes.length + " will now repeat its recorded 12 beats.";
+    revealAround(start.x, start.y, 1, false);
+  }
+
+  var audioCtx = null;
+  function pulseTone(freq) {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.055, audioCtx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.16);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.18);
+    } catch (e) {}
+  }
+
+  function drawTile(x, y, cw, ch) {
+    var k = key(x, y);
+    var seen = state.seen.has(k);
+    var lit = state.lit.has(k);
+    var tile = tileAt(x, y);
+
+    var px = x * cw, py = y * ch;
+
+    if (!seen) {
+      ctx.fillStyle = "#020308";
+      ctx.fillRect(px, py, cw + 1, ch + 1);
+      return;
+    }
+
+    var alpha = lit ? 1 : 0.30;
+    ctx.globalAlpha = alpha;
+
+    if (tile === "#") {
+      ctx.fillStyle = "#5b6484";
+      ctx.fillRect(px + 1, py + 1, cw - 2, ch - 2);
+      ctx.strokeStyle = "#8995c2";
+      ctx.strokeRect(px + 4, py + 4, cw - 8, ch - 8);
+    } else {
+      ctx.fillStyle = "#11182b";
+      ctx.fillRect(px + 1, py + 1, cw - 2, ch - 2);
+      ctx.strokeStyle = "rgba(150,170,230,.12)";
+      ctx.strokeRect(px + 1, py + 1, cw - 2, ch - 2);
+    }
+
+    if (tile === "A" || tile === "B") {
+      ctx.fillStyle = tile === "A" ? "#72e4ff" : "#d699ff";
+      ctx.beginPath();
+      ctx.arc(px + cw/2, py + ch/2, Math.min(cw,ch) * .25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#07101a";
+      ctx.font = "700 " + Math.floor(Math.min(cw,ch)*.24) + "px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(tile, px + cw/2, py + ch/2);
+    }
+
+    if (tile === "E") {
+      ctx.strokeStyle = state.unlocked ? "#8affb0" : "#ff6f91";
+      ctx.lineWidth = Math.max(2, cw * .05);
+      ctx.strokeRect(px + cw*.22, py + ch*.18, cw*.56, ch*.64);
+      ctx.lineWidth = 1;
+    }
+
+    ctx.globalAlpha = 1;
+  }
+
+  function drawActor(pos, color, label, cw, ch, ghost) {
+    var cx = pos.x * cw + cw/2;
+    var cy = pos.y * ch + ch/2;
+    ctx.globalAlpha = ghost ? .48 : 1;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.min(cw,ch) * (ghost ? .19 : .23), 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = "#08101c";
+    ctx.font = "800 " + Math.floor(Math.min(cw,ch)*.18) + "px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, cx, cy + 1);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPulse(center, cw, ch, index) {
+    var cx = center.x * cw + cw/2;
+    var cy = center.y * ch + ch/2;
+    ctx.strokeStyle = index % 2 ? "rgba(214,153,255,.72)" : "rgba(105,225,255,.72)";
+    ctx.lineWidth = Math.max(2, cw*.035);
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.min(cw,ch)*1.8, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.min(cw,ch)*3.5, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
+  function render() {
+    var cw = canvas.width / W;
+    var ch = canvas.height / H;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) drawTile(x,y,cw,ch);
+    }
+
+    for (var i = 0; i < state.pulseCenters.length; i++) {
+      drawPulse(state.pulseCenters[i], cw, ch, i);
+    }
+
+    for (var e = 0; e < state.echoes.length; e++) {
+      drawActor(state.echoes[e].pos, e % 2 ? "#d596ff" : "#74dfff", String(e + 1), cw, ch, true);
+    }
+    drawActor(state.player, "#fff4a3", "●", cw, ch, false);
+
+    if (state.won) {
+      ctx.fillStyle = "rgba(4,7,14,.68)";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = "#f4f7ff";
+      ctx.font = "800 52px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("Resonance complete", canvas.width/2, canvas.height/2 - 10);
+      ctx.font = "500 25px system-ui";
+      ctx.fillStyle = "#bec8e6";
+      ctx.fillText("R to restart", canvas.width/2, canvas.height/2 + 40);
+    }
+
+    beatEl.textContent = String(state.beat + 1) + " / " + LOOP_LENGTH;
+    loopEl.textContent = String(state.loop);
+    echoesEl.textContent = String(state.echoes.length);
+    lockEl.textContent = state.unlocked ? "open" : "locked";
+    lockEl.style.color = state.unlocked ? "#8affb0" : "#ff91aa";
+    messageEl.textContent = state.message;
+  }
+
+  document.addEventListener("keydown", function (event) {
+    var a = null;
+    if (event.key === "ArrowUp" || event.key.toLowerCase() === "w") a = "up";
+    if (event.key === "ArrowDown" || event.key.toLowerCase() === "s") a = "down";
+    if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") a = "left";
+    if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") a = "right";
+    if (event.code === "Space") a = "pulse";
+    if (event.key === "Enter" || event.key === ".") a = "wait";
+    if (event.key.toLowerCase() === "r") {
+      event.preventDefault();
+      reset();
+      return;
+    }
+    if (a) {
+      event.preventDefault();
+      advance(a);
+    }
+  });
+
+  document.querySelectorAll("[data-action]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      advance(button.getAttribute("data-action"));
+    });
+  });
+
+  document.getElementById("restart").addEventListener("click", reset);
+
+  reset();
+})();
+</script>
+</body>
+</html>
