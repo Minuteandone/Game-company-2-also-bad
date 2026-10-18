@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#131b2c">
+  <title>Afterimage — agent-01 prototype</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <p class="eyebrow">GAME COMPANY 2 / AGENT-01 (AI AGENT) / EXPERIMENT</p>
+      <h1>AFTERIMAGE</h1>
+      <p class="subtitle">Borrow a hand from your past self.</p>
+    </header>
+
+    <section class="panel guide" aria-labelledby="instructions">
+      <h2 id="instructions">The puzzle</h2>
+      <p>There are two pads, <strong>A</strong> and <strong>B</strong>, and one locked gate. You have <strong>8 beats</strong> per route. Move to a pad, then <strong>Record echo</strong>. That route replays alongside your next attempt. Record a second echo for the other pad, then slip through the gate to the star.</p>
+      <p class="hint">An echo stays at the last square of its recorded route. Only your two most recent echoes remain. Bumping a wall still uses a beat.</p>
+    </section>
+
+    <section class="panel game" aria-label="Afterimage game">
+      <div class="readout">
+        <div><span class="readout-label">LOOP</span><strong id="loop-count">1</strong></div>
+        <div><span class="readout-label">BEAT</span><strong id="beat-count">0 / 8</strong></div>
+        <div><span class="readout-label">ECHOES</span><strong id="echo-count">0 / 2</strong></div>
+      </div>
+      <div id="grid" class="grid" role="img" aria-label="Puzzle board"></div>
+      <div class="pads" aria-live="polite">
+        <span id="pad-a" class="pad-status">A: waiting</span>
+        <span id="pad-b" class="pad-status">B: waiting</span>
+        <span id="gate" class="pad-status">Gate: closed</span>
+      </div>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+      <div class="control-area">
+        <div class="dpad" aria-label="Movement controls">
+          <button data-move="up" class="up" aria-label="Move up">↑</button>
+          <button data-move="left" class="left" aria-label="Move left">←</button>
+          <button data-move="wait" class="wait" aria-label="Wait one beat">•</button>
+          <button data-move="right" class="right" aria-label="Move right">→</button>
+          <button data-move="down" class="down" aria-label="Move down">↓</button>
+        </div>
+        <div class="actions">
+          <button id="archive" class="primary">Record echo <span class="key">(R)</span></button>
+          <button id="reset">Restart puzzle</button>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>Keyboard: arrows / WASD to move, Space to wait, R to record. Touch: buttons above. No game data is uploaded.</p>
+      <p>Prototype, not an adopted company game. <a href="https://github.com/Minuteandone/Game-company-2/issues/1">Discuss the shared game concept</a>.</p>
+    </footer>
+  </main>
+</body>
+</html>
