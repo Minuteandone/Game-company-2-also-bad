@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Echo Relay — hybrid timed-pulse test</title>
+<style>
+:root{color-scheme:dark;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#070a11;color:#eefbff;display:grid;place-items:center;padding:10px}
+main{width:min(980px,100%)}h1{margin:0 0 4px}.sub{opacity:.72;margin:0 0 10px;line-height:1.45}
+.shell{border:1px solid #334760;border-radius:14px;overflow:hidden;background:#05070c}
+canvas{display:block;width:100%;aspect-ratio:16/9;background:#05070c;touch-action:none}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:9px;background:#0d1320;border-top:1px solid #26344a}
+#status{font-size:13px;flex:1;min-width:260px}.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dpad{display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(2,36px);gap:4px}
+button{border:1px solid #4d668a;border-radius:8px;background:#18243a;color:#f5fcff;font:inherit;font-weight:700;min-height:36px;padding:0 11px;touch-action:none}
+button:active,.active{background:#2d4a70}.u{grid-column:2}.l{grid-row:2}.d{grid-column:2;grid-row:2}.r{grid-column:3;grid-row:2}
+#pulse{min-height:76px;background:#102d3e;border-color:#4fa1c9}.tiny{font-size:12px;opacity:.6;line-height:1.45}
+</style>
+</head>
+<body>
+<main>
+<h1>Echo Relay — timed-pulse hybrid</h1>
+<p class="sub">Continuous movement, deterministic one-second beat buckets. Record a pulse near A, then match that beat near B on a later loop while the echo repeats A.</p>
+<div class="shell">
+<canvas id="c" width="960" height="540"></canvas>
+<div class="bar">
+<div id="status">Press Start or Enter.</div>
+<div class="controls">
+<div class="dpad"><button class="u" data-dir="u">▲</button><button class="l" data-dir="l">◀</button><button class="d" data-dir="d">▼</button><button class="r" data-dir="r">▶</button></div>
+<button id="pulse">PULSE<br><small>Space</small></button><button id="start">Start</button><button id="restart">Restart</button>
+</div>
+</div>
+</div>
+<p class="tiny">A/B synchronize when both receive a pulse during the same numbered beat. Echoes replay exact pulse timing. Once synchronized, reach the exit. Pulses also reveal nearby hidden geometry.</p>
+</main>
+<script>
+(()=>{
+'use strict';
+const c=document.querySelector('#c'),g=c.getContext('2d'),status=document.querySelector('#status');
+const startB=document.querySelector('#start'),restartB=document.querySelector('#restart'),pulseB=document.querySelector('#pulse');
+const W=960,H=540,DUR=8,BEAT=1,MAX=4,SPEED=190,R=11,RANGE=260,RESONATE=64,START={x:480,y:445};
+const wallSeed=[[300,95,26,250],[300,405,26,65],[634,95,26,250],[634,405,26,65],[405,245,150,24]];
+const resSeed=[{x:145,y:130,label:'A'},{x:815,y:130,label:'B'}],exitSeed={x:480,y:78};
+let walls,res,exit,p,echoes,path,pulseTimes,rings,t,loop,cool,running,won,lost,last,unlocked,lastSyncBeat;
+const keys=new Set(),touch=new Set();
+
+function reset(){
+ walls=wallSeed.map(a=>({x:a[0],y:a[1],w:a[2],h:a[3],known:false,lit:0}));
+ res=resSeed.map(q=>({...q,known:false,lit:0,lastBeat:-1}));
+ exit={...exitSeed,known:false,lit:0};p={...START};echoes=[];path=[{t:0,x:p.x,y:p.y}];pulseTimes=[];rings=[];
+ t=0;loop=1;cool=0;running=false;won=false;lost=false;unlocked=false;lastSyncBeat=-1;last=performance.now();sync();
+}
+function begin(){if(won||lost)reset();running=true;startB.textContent='Running';emit(p.x,p.y,false,true);sync()}
+function restart(){reset();begin()}
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const beatOf=tt=>Math.min(7,Math.max(0,Math.floor(tt/BEAT)));
+
+function reveal(px,py){
+ const o={x:px,y:py};
+ for(const w of walls){const q={x:w.x+w.w/2,y:w.y+w.h/2};if(dist(o,q)<RANGE+Math.max(w.w,w.h)/2){w.known=true;w.lit=1.2}}
+ for(const q of res)if(dist(o,q)<RANGE){q.known=true;q.lit=1.35}
+ if(dist(o,exit)<RANGE||unlocked){exit.known=true;exit.lit=1.35}
+}
+function hit(px,py){
+ if(px<R+8||px>W-R-8||py<R+8||py>H-R-8)return true;
+ for(const w of walls){const nx=Math.max(w.x,Math.min(px,w.x+w.w)),ny=Math.max(w.y,Math.min(py,w.y+w.h));if((px-nx)**2+(py-ny)**2<R*R)return true}
+ return false
+}
+function processResonators(px,py,beat){
+ for(const q of res)if(dist({x:px,y:py},q)<=RESONATE){q.lastBeat=beat;q.known=true;q.lit=1.6}
+ if(res[0].lastBeat===beat&&res[1].lastBeat===beat&&!unlocked){unlocked=true;lastSyncBeat=beat;exit.known=true;exit.lit=4}
+}
+function emit(px,py,ghost=false,free=false,stamp=t){
+ if(!free&&!ghost){if(!running||cool>0||won||lost)return;cool=.65;pulseTimes.push(stamp)}
+ const b=beatOf(stamp);rings.push({x:px,y:py,a:0,ghost});reveal(px,py);processResonators(px,py,b)
+}
+function pulse(){emit(p.x,p.y,false,false,t)}
+function move(dx,dy,dt){
+ if(!dx&&!dy)return;const m=Math.hypot(dx,dy)||1;dx=dx/m*SPEED*dt;dy=dy/m*SPEED*dt;
+ if(!hit(p.x+dx,p.y))p.x+=dx;if(!hit(p.x,p.y+dy))p.y+=dy
+}
+function sample(){const q=path[path.length-1];if(!q||t-q.t>=.035)path.push({t:t,x:p.x,y:p.y})}
+function posAt(a,tt){
+ if(!a.length)return{...START};if(tt<=a[0].t)return{x:a[0].x,y:a[0].y};const z=a[a.length-1];if(tt>=z.t)return{x:z.x,y:z.y};
+ let lo=0,hi=a.length-1;while(lo+1<hi){const m=(lo+hi)>>1;if(a[m].t<tt)lo=m;else hi=m}
+ const u=a[lo],v=a[hi],q=(tt-u.t)/Math.max(.0001,v.t-u.t);return{x:u.x+(v.x-u.x)*q,y:u.y+(v.y-u.y)*q}
+}
+function endLoop(){
+ path.push({t:DUR,x:p.x,y:p.y});if(loop>=MAX){running=false;lost=true;sync();return}
+ echoes.push({path:path.map(q=>({...q})),pulses:[...pulseTimes],cursor:0});loop++;t=0;p={...START};path=[{t:0,x:p.x,y:p.y}];pulseTimes=[];cool=0;
+ for(const e of echoes)e.cursor=0;for(const q of res)q.lastBeat=-1;emit(p.x,p.y,false,true,0);sync()
+}
+function update(dt){
+ if(!running||won||lost)return;const prev=t;t=Math.min(DUR,t+dt);cool=Math.max(0,cool-dt);
+ let dx=0,dy=0;if(keys.has('ArrowLeft')||keys.has('a')||keys.has('A')||touch.has('l'))dx--;if(keys.has('ArrowRight')||keys.has('d')||keys.has('D')||touch.has('r'))dx++;
+ if(keys.has('ArrowUp')||keys.has('w')||keys.has('W')||touch.has('u'))dy--;if(keys.has('ArrowDown')||keys.has('s')||keys.has('S')||touch.has('d'))dy++;
+ move(dx,dy,dt);sample();
+ for(const e of echoes)while(e.cursor<e.pulses.length&&e.pulses[e.cursor]<=t){const pt=e.pulses[e.cursor];if(pt>=prev-.001){const q=posAt(e.path,pt);emit(q.x,q.y,true,true,pt)}e.cursor++}
+ for(const q of rings)q.a+=dt;rings=rings.filter(q=>q.a<1.05);for(const w of walls)w.lit=Math.max(0,w.lit-dt);for(const q of res)q.lit=Math.max(0,q.lit-dt);exit.lit=Math.max(0,exit.lit-dt);
+ if(unlocked&&dist(p,exit)<=25){won=true;running=false;sync();return}if(t>=DUR)endLoop();else sync()
+}
+function grid(){g.strokeStyle='#122035';g.lineWidth=1;for(let i=0;i<=W;i+=48){g.beginPath();g.moveTo(i,0);g.lineTo(i,H);g.stroke()}for(let j=0;j<=H;j+=48){g.beginPath();g.moveTo(0,j);g.lineTo(W,j);g.stroke()}}
+function drawWalls(){for(const w of walls){if(!w.known)continue;g.fillStyle='rgba(117,169,214,'+(w.lit>0?.7:.14)+')';g.fillRect(w.x,w.y,w.w,w.h)}}
+function drawRes(){for(const q of res){if(!q.known)continue;g.beginPath();g.arc(q.x,q.y,27,0,Math.PI*2);g.fillStyle=q.lit>0?'rgba(255,220,112,.25)':'rgba(255,220,112,.08)';g.fill();g.strokeStyle=q.lit>0?'#ffdc70':'#756b42';g.lineWidth=3;g.stroke();g.fillStyle='#fff1b9';g.textAlign='center';g.textBaseline='middle';g.font='bold 17px monospace';g.fillText(q.label,q.x,q.y)}}
+function drawExit(){if(!exit.known&&!unlocked)return;g.beginPath();g.rect(exit.x-24,exit.y-18,48,36);g.fillStyle=unlocked?'#6cff9d44':'#7f9bb51c';g.fill();g.strokeStyle=unlocked?'#8effab':'#58697c';g.lineWidth=3;g.stroke();g.fillStyle=unlocked?'#d8ffe4':'#95a7b6';g.font='12px monospace';g.textAlign='center';g.fillText('EXIT',exit.x,exit.y+4)}
+function drawEchoes(){echoes.forEach(e=>{g.beginPath();e.path.forEach((q,i)=>i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y));g.strokeStyle='#c280ff22';g.lineWidth=2;g.stroke();const q=posAt(e.path,t);g.beginPath();g.arc(q.x,q.y,R,0,Math.PI*2);g.fillStyle='#c98fff88';g.fill();g.strokeStyle='#edd7ff';g.stroke()})}
+function drawPlayer(){g.beginPath();g.arc(p.x,p.y,R,0,Math.PI*2);g.fillStyle='#70e8ff';g.fill();g.strokeStyle='#d8fbff';g.lineWidth=2;g.stroke()}
+function drawRings(){for(const q of rings){const z=q.a/1.05;g.beginPath();g.arc(q.x,q.y,12+z*RANGE,0,Math.PI*2);g.strokeStyle=q.ghost?'rgba(202,146,255,'+(.8*(1-z))+')':'rgba(112,232,255,'+(.9*(1-z))+')';g.lineWidth=3;g.stroke()}}
+function overlay(a,b){g.fillStyle='#02050ac7';g.fillRect(0,0,W,H);g.fillStyle='#f4fbff';g.textAlign='center';g.textBaseline='middle';g.font='bold 36px monospace';g.fillText(a,W/2,H/2-34);g.font='16px monospace';g.fillStyle='#c7d9e5';g.fillText(b,W/2,H/2+10)}
+function draw(){
+ g.clearRect(0,0,W,H);g.fillStyle='#05070c';g.fillRect(0,0,W,H);grid();drawWalls();drawRes();drawExit();drawEchoes();drawPlayer();drawRings();
+ g.textBaseline='top';g.fillStyle='#e6f8ff';g.font='bold 18px monospace';g.textAlign='left';g.fillText('LOOP '+loop+'/'+MAX+'  BEAT '+(beatOf(t)+1)+'/8',18,16);g.textAlign='right';g.fillText(Math.max(0,DUR-t).toFixed(1)+'s',W-18,16);
+ if(!running&&!won&&!lost)overlay('TIMED-PULSE HYBRID','Record A on a beat, then answer B on that same beat next loop.');
+ if(won)overlay('RESONANCE LOCK','Timed echoes synchronized. Press R or Restart.');
+ if(lost)overlay('SIGNAL LOST','Four loops elapsed. Press R or Restart.');
+}
+function sync(){
+ if(won){status.textContent='Success: synchronized on beat '+(lastSyncBeat+1)+' and reached the exit.';startB.textContent='Start';return}
+ if(lost){status.textContent='Signal lost after four loops.';startB.textContent='Start';return}
+ status.textContent=running?'Loop '+loop+'/'+MAX+' · beat '+(beatOf(t)+1)+'/8 · echoes '+echoes.length+' · gate '+(unlocked?'OPEN':'locked'):'Press Start or Enter.'
+}
+function frame(ts){const dt=Math.min(.04,Math.max(0,(ts-last)/1000||0));last=ts;update(dt);draw();requestAnimationFrame(frame)}
+addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys.add(e.key);if(e.key===' '&&!e.repeat)pulse();if(e.key==='Enter'&&!running)begin();if((e.key==='r'||e.key==='R')&&!e.repeat)restart()},{passive:false});
+addEventListener('keyup',e=>keys.delete(e.key));addEventListener('blur',()=>{keys.clear();touch.clear()});
+document.querySelectorAll('[data-dir]').forEach(b=>{const k=b.dataset.dir,down=e=>{e.preventDefault();touch.add(k);b.classList.add('active');if(!running)begin()},up=e=>{e.preventDefault();touch.delete(k);b.classList.remove('active')};b.addEventListener('pointerdown',down);b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('pointerleave',up)});
+pulseB.addEventListener('pointerdown',e=>{e.preventDefault();if(!running)begin();pulse()});startB.addEventListener('click',begin);restartB.addEventListener('click',restart);
+reset();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
