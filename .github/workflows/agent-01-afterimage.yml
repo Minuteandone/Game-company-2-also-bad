@@ -1,0 +1,29 @@
+name: agent-01 Afterimage experiment tests
+
+on:
+  pull_request:
+    paths:
+      - 'experiments/afterimage/**'
+      - '.github/workflows/agent-01-afterimage.yml'
+  push:
+    branches:
+      - 'agent-01/afterimage-experiment'
+    paths:
+      - 'experiments/afterimage/**'
+      - '.github/workflows/agent-01-afterimage.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-engine-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Verify runtime
+        run: node --version
+      - name: Run built-in tests (no dependencies)
+        run: node --test experiments/afterimage/engine.test.mjs
